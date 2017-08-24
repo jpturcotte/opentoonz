@@ -190,7 +190,8 @@ void copyFrontBufferToBackBuffer() {
 /*! Compute new 3Dposition and new 2D position. */
 T3DPointD computeNew3DPosition(T3DPointD start3DPos, TPointD delta2D,
                                TPointD &new2dPos, GLdouble modelView3D[16],
-                               GLdouble projection3D[16], GLint viewport3D[4]) {
+                               GLdouble projection3D[16], GLint viewport3D[4],
+                               int devPixRatio) {
   GLdouble pos2D_x, pos2D_y, pos2D_z;
   gluProject(-start3DPos.x, -start3DPos.y, start3DPos.z, modelView3D,
              projection3D, viewport3D, &pos2D_x, &pos2D_y, &pos2D_z);
@@ -198,7 +199,7 @@ T3DPointD computeNew3DPosition(T3DPointD start3DPos, TPointD delta2D,
   GLdouble pos3D_x, pos3D_y, pos3D_z;
   gluUnProject(new2dPos.x, new2dPos.y, 1, modelView3D, projection3D, viewport3D,
                &pos3D_x, &pos3D_y, &pos3D_z);
-  new2dPos.y = viewport3D[3] - new2dPos.y - 20;
+  new2dPos.y = viewport3D[3] - new2dPos.y - 20 * devPixRatio;
   return T3DPointD(pos3D_x, pos3D_y, pos3D_z);
 }
 
@@ -466,12 +467,16 @@ public:
 //-----------------------------------------------------------------------------
 
 SceneViewer::SceneViewer(ImageUtils::FullScreenWidget *parent)
-    : QGLWidget(parent, touchProxy())
+    : GLWidgetForHighDpi(parent, touchProxy())
     , m_pressure(0)
     , m_lastMousePos(0, 0)
     , m_mouseButton(Qt::NoButton)
     , m_foregroundDrawing(false)
     , m_tabletEvent(false)
+    , m_tabletActive(false)
+    , m_tabletMove(false)
+    , m_tabletPressed(false)
+    , m_tabletReleased(false)
     , m_buttonClicked(false)
     , m_referenceMode(NORMAL_REFERENCE)
     , m_previewMode(NO_PREVIEW)
@@ -504,7 +509,8 @@ SceneViewer::SceneViewer(ImageUtils::FullScreenWidget *parent)
     , m_toolDisableReason("")
     , m_editPreviewSubCamera(false)
     , m_locator(NULL)
-    , m_isLocator(false) {
+    , m_isLocator(false)
+    , m_isBusyOnTabletMove(false) {
   m_visualSettings.m_sceneProperties =
       TApp::instance()->getCurrentScene()->getScene()->getProperties();
   // Enables multiple key input.
@@ -514,17 +520,15 @@ SceneViewer::SceneViewer(ImageUtils::FullScreenWidget *parent)
   setFocusPolicy(Qt::StrongFocus);
   setAcceptDrops(true);
   this->setMouseTracking(true);
+  // to be introduced from Qt 5.9
+  // this->setTabletTracking(true);
 
   for (int i = 0; i < tArrayCount(m_viewAff); i++)
     setViewMatrix(getNormalZoomScale(), i);
 
-  QImage image;
-  image.load(QString(":Resources/3Dside_r.png"));
-  m_3DSideR = rasterFromQImage(image);
-  image.load(QString(":Resources/3Dside_l.png"));
-  m_3DSideL = rasterFromQImage(image);
-  image.load(QString(":Resources/3Dtop.png"));
-  m_3DTop = rasterFromQImage(image);
+  m_3DSideR = rasterFromQPixmap(svgToPixmap(":Resources/3Dside_r.svg"));
+  m_3DSideL = rasterFromQPixmap(svgToPixmap(":Resources/3Dside_l.svg"));
+  m_3DTop   = rasterFromQPixmap(svgToPixmap(":Resources/3Dtop.svg"));
 
   makeCurrent();
   TGlContext context(tglGetCurrentContext());
@@ -765,6 +769,7 @@ TPointD SceneViewer::winToWorld(const QPoint &pos) const {
     } else
       return TAffine() * TPointD(0, 0);
   }
+
   return getViewMatrix().inv() * pp;
 }
 
@@ -832,6 +837,8 @@ void SceneViewer::showEvent(QShowEvent *) {
   connect(app->getCurrentTool(), SIGNAL(toolCursorTypeChanged()), this,
           SLOT(onToolChanged()));
 
+  connect(app, SIGNAL(tabletLeft()), this, SLOT(resetTabletStatus()));
+
   if (m_hRuler && m_vRuler) {
     if (!viewRulerToggle.getStatus()) {
       m_hRuler->hide();
@@ -882,9 +889,26 @@ void SceneViewer::hideEvent(QHideEvent *) {
   ToolHandle *toolHandle = app->getCurrentTool();
   if (toolHandle) toolHandle->disconnect(this);
 
+  disconnect(app, SIGNAL(tabletLeft()), this, SLOT(resetTabletStatus()));
   // hide locator
   if (m_locator && m_locator->isVisible()) m_locator->hide();
 }
+
+int SceneViewer::getVGuideCount() {
+  if (viewGuideToggle.getStatus())
+    return m_vRuler->getGuideCount();
+  else
+    return 0;
+}
+int SceneViewer::getHGuideCount() {
+  if (viewGuideToggle.getStatus())
+    return m_hRuler->getGuideCount();
+  else
+    return 0;
+}
+
+double SceneViewer::getVGuide(int index) { return m_vRuler->getGuide(index); }
+double SceneViewer::getHGuide(int index) { return m_hRuler->getGuide(index); }
 
 //-----------------------------------------------------------------------------
 
@@ -1253,7 +1277,7 @@ void SceneViewer::drawOverlay() {
       else {
         glPushMatrix();
         tglMultMatrix(m_drawCameraAff);
-        m_pixelSize = sqrt(tglGetPixelSize2());
+        m_pixelSize = sqrt(tglGetPixelSize2()) * getDevPixRatio();
         ViewerDraw::drawCamera(f, m_pixelSize);
         glPopMatrix();
       }
@@ -1297,7 +1321,7 @@ void SceneViewer::drawOverlay() {
     if (m_phi3D > 0) {
       T3DPointD topRasterPos3D = computeNew3DPosition(
           T3DPointD(500, 500, 1000), TPointD(-10, -10), m_topRasterPos,
-          modelView3D, projection3D, viewport3D);
+          modelView3D, projection3D, viewport3D, getDevPixRatio());
       glRasterPos3f(topRasterPos3D.x, topRasterPos3D.y, topRasterPos3D.z);
       glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
       glDrawPixels(m_3DTop->getWrap(), m_3DTop->getLy(), TGL_FMT, TGL_TYPE,
@@ -1305,7 +1329,7 @@ void SceneViewer::drawOverlay() {
 
       T3DPointD sideRasterPos3D = computeNew3DPosition(
           T3DPointD(-500, -500, 1000), TPointD(-10, -10), m_sideRasterPos,
-          modelView3D, projection3D, viewport3D);
+          modelView3D, projection3D, viewport3D, getDevPixRatio());
       glRasterPos3f(sideRasterPos3D.x, sideRasterPos3D.y, sideRasterPos3D.z);
       glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
       glDrawPixels(m_3DSideR->getWrap(), m_3DSideR->getLy(), TGL_FMT, TGL_TYPE,
@@ -1313,7 +1337,7 @@ void SceneViewer::drawOverlay() {
     } else {
       T3DPointD topRasterPos3D = computeNew3DPosition(
           T3DPointD(-500, 500, 1000), TPointD(-10, -10), m_topRasterPos,
-          modelView3D, projection3D, viewport3D);
+          modelView3D, projection3D, viewport3D, getDevPixRatio());
       glRasterPos3f(topRasterPos3D.x, topRasterPos3D.y, topRasterPos3D.z);
       glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
       glDrawPixels(m_3DTop->getWrap(), m_3DTop->getLy(), TGL_FMT, TGL_TYPE,
@@ -1321,7 +1345,7 @@ void SceneViewer::drawOverlay() {
 
       T3DPointD sideRasterPos3D = computeNew3DPosition(
           T3DPointD(500, -500, 1000), TPointD(-10, -10), m_sideRasterPos,
-          modelView3D, projection3D, viewport3D);
+          modelView3D, projection3D, viewport3D, getDevPixRatio());
       glRasterPos3f(sideRasterPos3D.x, sideRasterPos3D.y, sideRasterPos3D.z);
       glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
       glDrawPixels(m_3DSideL->getWrap(), m_3DSideL->getLy(), TGL_FMT, TGL_TYPE,
@@ -1351,7 +1375,7 @@ void SceneViewer::drawOverlay() {
     if (tool->getToolType() & TTool::LevelTool &&
         !app->getCurrentObject()->isSpline())
       glScaled(m_dpiScale.x, m_dpiScale.y, 1);
-    m_pixelSize = sqrt(tglGetPixelSize2());
+    m_pixelSize = sqrt(tglGetPixelSize2()) * getDevPixRatio();
     tool->draw();
     glPopMatrix();
     // Used (only in the T_RGBPicker tool) to notify and set the currentColor
@@ -2556,10 +2580,12 @@ void SceneViewer::invalidateToolStatus() {
 */
 
 TRectD SceneViewer::getGeometry() const {
+  int devPixRatio = getDevPixRatio();
   TTool *tool     = TApp::instance()->getCurrentTool()->getTool();
-  TPointD topLeft = tool->getMatrix().inv() * winToWorld(geometry().topLeft());
-  TPointD bottomRight =
-      tool->getMatrix().inv() * winToWorld(geometry().bottomRight());
+  TPointD topLeft =
+      tool->getMatrix().inv() * winToWorld(geometry().topLeft() * devPixRatio);
+  TPointD bottomRight = tool->getMatrix().inv() *
+                        winToWorld(geometry().bottomRight() * devPixRatio);
 
   TObjectHandle *objHandle = TApp::instance()->getCurrentObject();
   if (tool->getToolType() & TTool::LevelTool && !objHandle->isSpline()) {

@@ -27,6 +27,10 @@ public:
                        const QString &rolloverPixmapName,
                        const QString &pressedPixmapName);
 
+  TPanelTitleBarButton(QWidget *parent, const QPixmap &standardPixmap,
+                       const QPixmap &rolloverPixmap,
+                       const QPixmap &pressedPixmap);
+
   //! call this method to make a radio button. id is the button identifier
   void setButtonSet(TPanelTitleBarButtonSet *buttonSet, int id);
   int getId() const { return m_id; }
@@ -230,8 +234,6 @@ public:
 
 protected:
   void paintEvent(QPaintEvent *) override;
-  void showEvent(QShowEvent *) override;
-  void hideEvent(QHideEvent *) override;
   void enterEvent(QEvent *) override;
   void leaveEvent(QEvent *) override;
 
@@ -258,7 +260,7 @@ signals:
 
 class TPanelFactory {
   QString m_panelType;
-  static QMap<QString, TPanelFactory *> m_table;
+  static QMap<QString, TPanelFactory *> &tableInstance();
 
 public:
   TPanelFactory(QString panelType);

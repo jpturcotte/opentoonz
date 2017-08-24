@@ -25,8 +25,11 @@ extern "C" {
 
 #include "tiio_tif.h"
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #pragma warning(disable : 4996)
+#endif
+
+#ifdef _WIN32
 #include "windows.h"
 #endif
 
@@ -99,6 +102,8 @@ void TifReader::open(FILE *file) {
   int fd = fileno(file);
 #if 0
 	m_tiff = TIFFFdOpenNoCloseProc(fd, "", "rb");
+#elif defined(_WIN32) && defined(__GNUC__)
+  m_tiff = TIFFFdOpen((int)_get_osfhandle(dup(fd)), "", "rb");
 #else
   m_tiff = TIFFFdOpen(dup(fd), "", "rb");
 #endif
@@ -789,6 +794,8 @@ void TifWriter::open(FILE *file, const TImageInfo &info) {
   int fd = fileno(file);
 #if 0
 	m_tiff = TIFFFdOpenNoCloseProc(fd, "", mode.c_str());
+#elif defined(_WIN32) && defined(__GNUC__)
+  m_tiff = TIFFFdOpen((int)_get_osfhandle(dup(fd)), "", mode.c_str());
 #else
   m_tiff = TIFFFdOpen(dup(fd), "", mode.c_str());
 #endif

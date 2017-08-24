@@ -35,7 +35,6 @@ extern TEnv::StringVar EnvSafeAreaName;
 //=============================================================================
 // TPanel
 //-----------------------------------------------------------------------------
-extern QWidget *CurrentOpenedBrowser;
 
 TPanel::TPanel(QWidget *parent, Qt::WindowFlags flags,
                TDockWidget::Orientation orientation)
@@ -57,20 +56,6 @@ TPanel::TPanel(QWidget *parent, Qt::WindowFlags flags,
   connect(m_panelTitleBar, SIGNAL(closeButtonPressed()), this,
           SLOT(onCloseButtonPressed()));
   setOrientation(orientation);
-}
-
-void TPanel::hideEvent(QHideEvent *) {
-  if (CurrentOpenedBrowser) {
-    CurrentOpenedBrowser->setWindowModality(Qt::ApplicationModal);
-    // setWindowModality(Qt::NonModal);
-  }
-}
-
-void TPanel::showEvent(QShowEvent *) {
-  if (CurrentOpenedBrowser) {
-    CurrentOpenedBrowser->setWindowModality(Qt::NonModal);
-    // setWindowModality(Qt::WindowModal);
-  }
 }
 
 //-----------------------------------------------------------------------------
@@ -155,6 +140,23 @@ TPanelTitleBarButton::TPanelTitleBarButton(QWidget *parent,
     , m_buttonSet(0)
     , m_id(0) {
   setFixedSize(m_standardPixmap.size());
+}
+
+//-----------------------------------------------------------------------------
+
+TPanelTitleBarButton::TPanelTitleBarButton(QWidget *parent,
+                                           const QPixmap &standardPixmap,
+                                           const QPixmap &rolloverPixmap,
+                                           const QPixmap &pressedPixmap)
+    : QWidget(parent)
+    , m_standardPixmap(standardPixmap)
+    , m_rolloverPixmap(rolloverPixmap)
+    , m_pressedPixmap(pressedPixmap)
+    , m_rollover(false)
+    , m_pressed(false)
+    , m_buttonSet(0)
+    , m_id(0) {
+  setFixedSize(m_standardPixmap.size() / m_standardPixmap.devicePixelRatio());
 }
 
 //-----------------------------------------------------------------------------
@@ -370,16 +372,17 @@ void TPanelTitleBar::paintEvent(QPaintEvent *) {
   }
 
   if (dw->isFloating()) {
-    const static QPixmap closeButtonPixmap(":/Resources/close_pane.png");
+    const static QPixmap closeButtonPixmap(
+        svgToPixmap(":/Resources/close_pane.svg", QSize(16, 16)));
     const static QPixmap closeButtonPixmapOver(
-        ":/Resources/close_pane_rollover.png");
+        svgToPixmap(":/Resources/close_pane_rollover.svg", QSize(16, 16)));
 
-    QRect closeRect(rect.right() - 17, rect.top() + 1, 16, 16);
+    QPoint closeButtonPos(rect.right() - 17, rect.top() + 1);
 
     if (m_closeButtonHighlighted)
-      painter.drawPixmap(closeRect, closeButtonPixmapOver);
+      painter.drawPixmap(closeButtonPos, closeButtonPixmapOver);
     else
-      painter.drawPixmap(closeRect, closeButtonPixmap);
+      painter.drawPixmap(closeButtonPos, closeButtonPixmap);
   }
 
   painter.end();
@@ -457,25 +460,28 @@ void TPanelTitleBar::resizeEvent(QResizeEvent *e) {
 //-----------------------------------------------------------------------------
 
 TPanelFactory::TPanelFactory(QString panelType) : m_panelType(panelType) {
-  assert(m_table.count(panelType) == 0);
-  m_table[m_panelType] = this;
+  assert(tableInstance().count(panelType) == 0);
+  tableInstance()[m_panelType] = this;
 }
 
 //-----------------------------------------------------------------------------
 
-TPanelFactory::~TPanelFactory() { m_table.remove(m_panelType); }
+TPanelFactory::~TPanelFactory() { tableInstance().remove(m_panelType); }
 
 //-----------------------------------------------------------------------------
 
-QMap<QString, TPanelFactory *> TPanelFactory::m_table;
+QMap<QString, TPanelFactory *> &TPanelFactory::tableInstance() {
+  static QMap<QString, TPanelFactory *> table;
+  return table;
+}
 
 //-----------------------------------------------------------------------------
 
 TPanel *TPanelFactory::createPanel(QWidget *parent, QString panelType) {
   TPanel *panel = 0;
 
-  QMap<QString, TPanelFactory *>::iterator it = m_table.find(panelType);
-  if (it == m_table.end()) {
+  QMap<QString, TPanelFactory *>::iterator it = tableInstance().find(panelType);
+  if (it == tableInstance().end()) {
     TPanel *panel = new TPanel(parent);
     panel->setPanelType(panelType.toStdString());
     return panel;

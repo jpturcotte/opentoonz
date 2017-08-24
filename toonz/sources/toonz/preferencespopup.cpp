@@ -19,6 +19,7 @@
 #include "toonzqt/filefield.h"
 
 // TnzLib includes
+#include "toonz/txsheethandle.h"
 #include "toonz/tscenehandle.h"
 #include "toonz/txshlevelhandle.h"
 #include "toonz/txshleveltypes.h"
@@ -338,6 +339,19 @@ void PreferencesPopup::onRoomChoiceChanged(int index) {
 
 //-----------------------------------------------------------------------------
 
+void PreferencesPopup::onImportPolicyChanged(int index) {
+  m_pref->setDefaultImportPolicy(index);
+}
+
+//-----------------------------------------------------------------------------
+
+void PreferencesPopup::onImportPolicyExternallyChanged(int policy) {
+  // call slot function onImportPolicyChanged() accordingly
+  m_importPolicy->setCurrentIndex(policy);
+}
+
+//-----------------------------------------------------------------------------
+
 void PreferencesPopup::onScanLevelTypeChanged(const QString &text) {
   m_pref->setScanLevelType(text.toStdString());
 }
@@ -460,6 +474,12 @@ void PreferencesPopup::onIconSizeChanged() {
 
 void PreferencesPopup::onAutoExposeChanged(int index) {
   m_pref->enableAutoExpose(index == Qt::Checked);
+}
+
+//-----------------------------------------------------------------------------
+
+void PreferencesPopup::onIgnoreImageDpiChanged(int index) {
+  m_pref->setIgnoreImageDpi(index == Qt::Checked);
 }
 
 //-----------------------------------------------------------------------------
@@ -605,8 +625,8 @@ void PreferencesPopup::onAnimationStepChanged() {
 
 //-----------------------------------------------------------------------------
 
-void PreferencesPopup::onLanguageTypeChanged(int index) {
-  m_pref->setCurrentLanguage(index);
+void PreferencesPopup::onLanguageTypeChanged(const QString &langName) {
+  m_pref->setCurrentLanguage(langName);
   QString currentLanguage = m_pref->getCurrentLanguage();
 }
 
@@ -657,7 +677,7 @@ void PreferencesPopup::setChessboardColor2(const TPixel32 &color,
 //-----------------------------------------------------------------------------
 
 void PreferencesPopup::onColumnIconChange(const QString &value) {
-  m_pref->setColumnIconLoadingPolicy(value == QString("At Once")
+  m_pref->setColumnIconLoadingPolicy(value == tr("At Once")
                                          ? Preferences::LoadAtOnce
                                          : Preferences::LoadOnDemand);
 }
@@ -749,10 +769,10 @@ void PreferencesPopup::onShowKeyframesOnCellAreaChanged(int index) {
 
 //-----------------------------------------------------------------------------
 
-void PreferencesPopup::onStyleSheetTypeChanged(int index) {
-  m_pref->setCurrentStyleSheet(index);
+void PreferencesPopup::onStyleSheetTypeChanged(const QString &styleSheetName) {
+  m_pref->setCurrentStyleSheet(styleSheetName);
   QApplication::setOverrideCursor(Qt::WaitCursor);
-  QString currentStyle = m_pref->getCurrentStyleSheet();
+  QString currentStyle = m_pref->getCurrentStyleSheetPath();
   qApp->setStyleSheet(currentStyle);
   QApplication::restoreOverrideCursor();
 }
@@ -828,6 +848,13 @@ void PreferencesPopup::onDefLevelParameterChanged() {
   m_pref->setDefLevelWidth(w);
   m_pref->setDefLevelHeight(h);
   m_pref->setDefLevelDpi(dpi);
+}
+
+//-----------------------------------------------------------------------------
+
+void PreferencesPopup::onVectorSnappingTargetChanged(int index) {
+  m_vectorSnappingTargetCB->setCurrentIndex(index);
+  m_pref->setVectorSnappingTarget(index);
 }
 
 //-----------------------------------------------------------------------------
@@ -973,6 +1000,23 @@ void PreferencesPopup::onUseNumpadForSwitchingStylesClicked(bool checked) {
   // emit signal to update Palette and Viewer
   TApp::instance()->getCurrentScene()->notifyPreferenceChanged(
       "NumpadForSwitchingStyles");
+}
+
+//-----------------------------------------------------------------------------
+
+void PreferencesPopup::onShowXSheetToolbarClicked(bool checked) {
+  m_pref->enableShowXSheetToolbar(checked);
+  TApp::instance()->getCurrentScene()->notifyPreferenceChanged("XSheetToolbar");
+}
+
+//-----------------------------------------------------------------------------
+
+void PreferencesPopup::onExpandFunctionHeaderClicked(bool checked) {
+  m_pref->enableExpandFunctionHeader(checked);
+}
+
+void PreferencesPopup::onShowColumnNumbersChanged(int index) {
+  m_pref->enableShowColumnNumbers(index == Qt::Checked);
 }
 
 //-----------------------------------------------------------------------------
@@ -1132,6 +1176,8 @@ PreferencesPopup::PreferencesPopup()
       new CheckBox(tr("Expose Loaded Levels in Xsheet"), this);
   CheckBox *createSubfolderCB =
       new CheckBox(tr("Create Sub-folder when Importing Sub-xsheet"), this);
+  CheckBox *m_ignoreImageDpiCB =
+      new CheckBox(tr("Use Camera DPI for All Imported Images"), this);
   // Column Icon
   m_columnIconOm                                   = new QComboBox(this);
   QComboBox *initialLoadTlvCachingBehaviorComboBox = new QComboBox(this);
@@ -1145,6 +1191,8 @@ PreferencesPopup::PreferencesPopup()
 
   QComboBox *paletteTypeForRasterColorModelComboBox = new QComboBox(this);
 
+  m_importPolicy = new QComboBox;
+
   //--- Import/Export ------------------------------
   categoryList->addItem(tr("Import/Export"));
   m_ffmpegPathFileFld = new DVGui::FileField(this, QString(""));
@@ -1155,13 +1203,14 @@ PreferencesPopup::PreferencesPopup()
   //--- Drawing ------------------------------
   categoryList->addItem(tr("Drawing"));
 
-  m_defScanLevelType = new QComboBox(this);
-  m_defLevelType     = new QComboBox(this);
-  m_defLevelWidth    = new MeasuredDoubleLineEdit(0);
-  m_defLevelHeight   = new MeasuredDoubleLineEdit(0);
-  m_defLevelDpi      = new DoubleLineEdit(0, 66.76);
-  m_autocreationType = new QComboBox(this);
-  m_dpiLabel         = new QLabel(tr("DPI:"), this);
+  m_defScanLevelType       = new QComboBox(this);
+  m_defLevelType           = new QComboBox(this);
+  m_defLevelWidth          = new MeasuredDoubleLineEdit(0);
+  m_defLevelHeight         = new MeasuredDoubleLineEdit(0);
+  m_defLevelDpi            = new DoubleLineEdit(0, 66.76);
+  m_autocreationType       = new QComboBox(this);
+  m_dpiLabel               = new QLabel(tr("DPI:"), this);
+  m_vectorSnappingTargetCB = new QComboBox(this);
   CheckBox *keepOriginalCleanedUpCB =
       new CheckBox(tr("Keep Original Cleaned Up Drawings As Backup"), this);
   CheckBox *multiLayerStylePickerCB = new CheckBox(
@@ -1189,6 +1238,14 @@ PreferencesPopup::PreferencesPopup()
       new CheckBox(tr("Use Arrow Key to Shift Cell Selection"), this);
   CheckBox *inputCellsWithoutDoubleClickingCB =
       new CheckBox(tr("Enable to Input Cells without Double Clicking"), this);
+  m_showXSheetToolbar = new QGroupBox(tr("Show Toolbar in the XSheet "), this);
+  m_showXSheetToolbar->setCheckable(true);
+  m_expandFunctionHeader = new CheckBox(
+      tr("Expand Function Editor Header to Match XSheet Toolbar Height "
+         "(Requires Restart)"),
+      this);
+  CheckBox *showColumnNumbersCB =
+      new CheckBox(tr("Show Column Numbers in Column Headers"), this);
 
   //--- Animation ------------------------------
   categoryList->addItem(tr("Animation"));
@@ -1282,9 +1339,10 @@ PreferencesPopup::PreferencesPopup()
   }
   //--- Interface ------------------------------
   QStringList styleSheetList;
+  currentIndex = 0;
   for (int i = 0; i < m_pref->getStyleSheetCount(); i++) {
     QString string = m_pref->getStyleSheet(i);
-    if (string == m_pref->getCurrentStyleSheet()) currentIndex = i;
+    if (string == m_pref->getCurrentStyleSheetName()) currentIndex = i;
     TFilePath path(string.toStdWString());
     styleSheetList.push_back(QString::fromStdWString(path.getWideName()));
   }
@@ -1348,6 +1406,7 @@ PreferencesPopup::PreferencesPopup()
 
   //--- Loading ------------------------------
   exposeLoadedLevelsCB->setChecked(m_pref->isAutoExposeEnabled());
+  m_ignoreImageDpiCB->setChecked(m_pref->isIgnoreImageDpiEnabled());
   QStringList behaviors;
   behaviors << tr("On Demand") << tr("All Icons") << tr("All Icons & Images");
   initialLoadTlvCachingBehaviorComboBox->addItems(behaviors);
@@ -1375,6 +1434,13 @@ PreferencesPopup::PreferencesPopup()
   paletteTypeForRasterColorModelComboBox->addItems(paletteTypes);
   paletteTypeForRasterColorModelComboBox->setCurrentIndex(
       m_pref->getPaletteTypeOnLoadRasterImageAsColorModel());
+
+  QStringList policies;
+  policies << tr("Always ask before loading or importing")
+           << tr("Always import the file to the current project")
+           << tr("Always load the file from the current location");
+  m_importPolicy->addItems(policies);
+  m_importPolicy->setCurrentIndex(m_pref->getDefaultImportPolicy());
 
   //--- Import/Export ------------------------------
   QString path = m_pref->getFfmpegPath();
@@ -1436,6 +1502,11 @@ PreferencesPopup::PreferencesPopup()
   int autocreationType = m_pref->getAutocreationType();
   m_autocreationType->setCurrentIndex(autocreationType);
 
+  QStringList vectorSnappingTargets;
+  vectorSnappingTargets << tr("Strokes") << tr("Guides") << tr("All");
+  m_vectorSnappingTargetCB->addItems(vectorSnappingTargets);
+  m_vectorSnappingTargetCB->setCurrentIndex(m_pref->getVectorSnappingTarget());
+
   //--- Xsheet ------------------------------
   xsheetAutopanDuringPlaybackCB->setChecked(m_pref->isXsheetAutopanEnabled());
   m_cellsDragBehaviour->addItem(tr("Cells Only"));
@@ -1448,6 +1519,9 @@ PreferencesPopup::PreferencesPopup()
       m_pref->isUseArrowKeyToShiftCellSelectionEnabled());
   inputCellsWithoutDoubleClickingCB->setChecked(
       m_pref->isInputCellsWithoutDoubleClickingEnabled());
+  m_showXSheetToolbar->setChecked(m_pref->isShowXSheetToolbarEnabled());
+  m_expandFunctionHeader->setChecked(m_pref->isExpandFunctionHeaderEnabled());
+  showColumnNumbersCB->setChecked(m_pref->isShowColumnNumbersEnabled());
 
   //--- Animation ------------------------------
   QStringList list;
@@ -1713,11 +1787,22 @@ PreferencesPopup::PreferencesPopup()
     loadingFrameLay->setMargin(15);
     loadingFrameLay->setSpacing(10);
     {
+      QHBoxLayout *importLay = new QHBoxLayout();
+      importLay->setMargin(0);
+      importLay->setSpacing(5);
+      {
+        importLay->addWidget(new QLabel(tr("Default File Import Behavior:")));
+        importLay->addWidget(m_importPolicy);
+      }
+      importLay->addStretch(0);
+      loadingFrameLay->addLayout(importLay, 0);
       loadingFrameLay->addWidget(exposeLoadedLevelsCB, 0,
                                  Qt::AlignLeft | Qt::AlignVCenter);
       loadingFrameLay->addWidget(createSubfolderCB, 0,
                                  Qt::AlignLeft | Qt::AlignVCenter);
       loadingFrameLay->addWidget(removeSceneNumberFromLoadedLevelNameCB, 0,
+                                 Qt::AlignLeft | Qt::AlignVCenter);
+      loadingFrameLay->addWidget(m_ignoreImageDpiCB, 0,
                                  Qt::AlignLeft | Qt::AlignVCenter);
 
       QGridLayout *cacheLay = new QGridLayout();
@@ -1725,11 +1810,11 @@ PreferencesPopup::PreferencesPopup()
       cacheLay->setHorizontalSpacing(5);
       cacheLay->setVerticalSpacing(10);
       {
-        cacheLay->addWidget(new QLabel(tr("Default TLV Caching Behavior")), 0,
+        cacheLay->addWidget(new QLabel(tr("Default TLV Caching Behavior:")), 0,
                             0, Qt::AlignRight | Qt::AlignVCenter);
         cacheLay->addWidget(initialLoadTlvCachingBehaviorComboBox, 0, 1);
 
-        cacheLay->addWidget(new QLabel(tr("Column Icon"), this), 1, 0,
+        cacheLay->addWidget(new QLabel(tr("Column Icon:"), this), 1, 0,
                             Qt::AlignRight | Qt::AlignVCenter);
         cacheLay->addWidget(m_columnIconOm, 1, 1);
 
@@ -1742,7 +1827,7 @@ PreferencesPopup::PreferencesPopup()
 
         cacheLay->addWidget(
             new QLabel(
-                tr("Palette Type on Loading Raster Image as Color Model")),
+                tr("Palette Type on Loading Raster Image as Color Model:")),
             3, 0, Qt::AlignRight | Qt::AlignVCenter);
         cacheLay->addWidget(paletteTypeForRasterColorModelComboBox, 3, 1, 1, 5);
       }
@@ -1848,6 +1933,9 @@ PreferencesPopup::PreferencesPopup()
         drawingTopLay->addWidget(new QLabel(tr("Autocreation:")), 4, 0,
                                  Qt::AlignRight);
         drawingTopLay->addWidget(m_autocreationType, 4, 1, 1, 3);
+        drawingTopLay->addWidget(new QLabel(tr("Vector Snapping:")), 5, 0,
+                                 Qt::AlignRight);
+        drawingTopLay->addWidget(m_vectorSnappingTargetCB, 5, 1, 1, 3);
       }
       drawingFrameLay->addLayout(drawingTopLay, 0);
 
@@ -1861,7 +1949,6 @@ PreferencesPopup::PreferencesPopup()
                                  Qt::AlignLeft | Qt::AlignVCenter);
       drawingFrameLay->addWidget(m_useNumpadForSwitchingStyles, 0,
                                  Qt::AlignLeft | Qt::AlignVCenter);
-
       drawingFrameLay->addStretch(1);
     }
     drawingBox->setLayout(drawingFrameLay);
@@ -1877,7 +1964,7 @@ PreferencesPopup::PreferencesPopup()
     QGridLayout *xsheetFrameLay = new QGridLayout();
     xsheetFrameLay->setMargin(15);
     xsheetFrameLay->setHorizontalSpacing(15);
-    xsheetFrameLay->setVerticalSpacing(10);
+    xsheetFrameLay->setVerticalSpacing(11);
     {
       xsheetFrameLay->addWidget(new QLabel(tr("Next/Previous Step Frames:")), 0,
                                 0, Qt::AlignRight | Qt::AlignVCenter);
@@ -1893,11 +1980,22 @@ PreferencesPopup::PreferencesPopup()
       xsheetFrameLay->addWidget(showKeyframesOnCellAreaCB, 4, 0, 1, 2);
       xsheetFrameLay->addWidget(useArrowKeyToShiftCellSelectionCB, 5, 0, 1, 2);
       xsheetFrameLay->addWidget(inputCellsWithoutDoubleClickingCB, 6, 0, 1, 2);
+
+      QVBoxLayout *xSheetToolbarLay = new QVBoxLayout();
+      xSheetToolbarLay->setMargin(10);
+      {
+        xSheetToolbarLay->addWidget(m_expandFunctionHeader, 0,
+                                    Qt::AlignLeft | Qt::AlignVCenter);
+      }
+      m_showXSheetToolbar->setLayout(xSheetToolbarLay);
+
+      xsheetFrameLay->addWidget(m_showXSheetToolbar, 7, 0, 3, 3);
+      xsheetFrameLay->addWidget(showColumnNumbersCB, 10, 0, 1, 2);
     }
     xsheetFrameLay->setColumnStretch(0, 0);
     xsheetFrameLay->setColumnStretch(1, 0);
     xsheetFrameLay->setColumnStretch(2, 1);
-    xsheetFrameLay->setRowStretch(7, 1);
+    xsheetFrameLay->setRowStretch(11, 1);
     xsheetBox->setLayout(xsheetFrameLay);
     stackedWidget->addWidget(xsheetBox);
 
@@ -2089,8 +2187,9 @@ PreferencesPopup::PreferencesPopup()
   ret = ret && connect(m_projectRootCustom, SIGNAL(stateChanged(int)),
                        SLOT(onProjectRootChanged()));
   //--- Interface ----------------------
-  ret = ret && connect(styleSheetType, SIGNAL(currentIndexChanged(int)),
-                       SLOT(onStyleSheetTypeChanged(int)));
+  ret = ret &&
+        connect(styleSheetType, SIGNAL(currentIndexChanged(const QString &)),
+                SLOT(onStyleSheetTypeChanged(const QString &)));
   ret = ret && connect(m_pixelsOnlyCB, SIGNAL(stateChanged(int)),
                        SLOT(onPixelsOnlyChanged(int)));
   // pixels unit may deactivated externally on loading scene (see
@@ -2115,8 +2214,9 @@ PreferencesPopup::PreferencesPopup()
   ret = ret && connect(m_viewStep, SIGNAL(editingFinished()),
                        SLOT(onViewValuesChanged()));
   if (languageList.size() > 1)
-    ret = ret && connect(languageType, SIGNAL(currentIndexChanged(int)),
-                         SLOT(onLanguageTypeChanged(int)));
+    ret = ret &&
+          connect(languageType, SIGNAL(currentIndexChanged(const QString &)),
+                  SLOT(onLanguageTypeChanged(const QString &)));
   ret = ret && connect(moveCurrentFrameCB, SIGNAL(stateChanged(int)), this,
                        SLOT(onMoveCurrentFrameChanged(int)));
   ret =
@@ -2164,6 +2264,8 @@ PreferencesPopup::PreferencesPopup()
   //--- Loading ----------------------
   ret = ret && connect(exposeLoadedLevelsCB, SIGNAL(stateChanged(int)), this,
                        SLOT(onAutoExposeChanged(int)));
+  ret = ret && connect(m_ignoreImageDpiCB, SIGNAL(stateChanged(int)), this,
+                       SLOT(onIgnoreImageDpiChanged(int)));
   ret = ret && connect(initialLoadTlvCachingBehaviorComboBox,
                        SIGNAL(currentIndexChanged(int)), this,
                        SLOT(onInitialLoadTlvCachingBehaviorChanged(int)));
@@ -2182,6 +2284,11 @@ PreferencesPopup::PreferencesPopup()
   ret = ret && connect(paletteTypeForRasterColorModelComboBox,
                        SIGNAL(currentIndexChanged(int)), this,
                        SLOT(onPaletteTypeForRasterColorModelChanged(int)));
+  ret = ret && connect(m_importPolicy, SIGNAL(currentIndexChanged(int)),
+                       SLOT(onImportPolicyChanged(int)));
+  ret = ret && connect(TApp::instance()->getCurrentScene(),
+                       SIGNAL(importPolicyChanged(int)), this,
+                       SLOT(onImportPolicyExternallyChanged(int)));
 
   //--- Import/Export ----------------------
   ret = ret && connect(m_ffmpegPathFileFld, SIGNAL(pathChanged()), this,
@@ -2207,6 +2314,9 @@ PreferencesPopup::PreferencesPopup()
                        SLOT(onDefLevelTypeChanged(int)));
   ret = ret && connect(m_autocreationType, SIGNAL(currentIndexChanged(int)),
                        SLOT(onAutocreationTypeChanged(int)));
+  ret =
+      ret && connect(m_vectorSnappingTargetCB, SIGNAL(currentIndexChanged(int)),
+                     SLOT(onVectorSnappingTargetChanged(int)));
   ret = ret && connect(m_defLevelWidth, SIGNAL(valueChanged()),
                        SLOT(onDefLevelParameterChanged()));
   ret = ret && connect(m_defLevelHeight, SIGNAL(valueChanged()),
@@ -2233,6 +2343,13 @@ PreferencesPopup::PreferencesPopup()
   ret = ret &&
         connect(inputCellsWithoutDoubleClickingCB, SIGNAL(stateChanged(int)),
                 SLOT(onInputCellsWithoutDoubleClickingClicked(int)));
+  ret = ret && connect(m_showXSheetToolbar, SIGNAL(clicked(bool)),
+                       SLOT(onShowXSheetToolbarClicked(bool)));
+  ret = ret && connect(m_expandFunctionHeader, SIGNAL(clicked(bool)),
+                       SLOT(onExpandFunctionHeaderClicked(bool)));
+
+  ret = ret && connect(showColumnNumbersCB, SIGNAL(stateChanged(int)), this,
+                       SLOT(onShowColumnNumbersChanged(int)));
 
   //--- Animation ----------------------
   ret = ret && connect(m_keyframeType, SIGNAL(currentIndexChanged(int)),

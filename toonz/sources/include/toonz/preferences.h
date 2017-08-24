@@ -76,6 +76,8 @@ public:
                     header)     */
   };
 
+  enum SnappingTarge { SnapStrokes, SnapGuides, SnapAll };
+
 public:
   static Preferences *instance();
 
@@ -132,13 +134,14 @@ public:
 
   // Interface  tab
 
-  void setCurrentLanguage(int currentLanguage);
+  void setCurrentLanguage(const QString &currentLanguage);
   QString getCurrentLanguage() const;
   QString getLanguage(int index) const;
   int getLanguageCount() const;
 
-  void setCurrentStyleSheet(int currentStyleSheet);
-  QString getCurrentStyleSheet() const;
+  void setCurrentStyleSheet(const QString &currentStyleSheet);
+  QString getCurrentStyleSheetName() const;
+  QString getCurrentStyleSheetPath() const;
   QString getStyleSheet(int index) const;
   int getStyleSheetCount() const;
 
@@ -269,6 +272,12 @@ public:
     return m_paletteTypeOnLoadRasterImageAsColorModel;
   }
 
+  void setDefaultImportPolicy(int policy);
+  int getDefaultImportPolicy() { return m_importPolicy; }
+
+  void setIgnoreImageDpi(bool on);
+  bool isIgnoreImageDpiEnabled() const { return m_ignoreImageDpi; }
+
   // Drawing  tab
 
   void setScanLevelType(std::string s);
@@ -315,6 +324,9 @@ public:
     return m_useNumpadForSwitchingStyles;
   }
 
+  void setVectorSnappingTarget(int target);
+  int getVectorSnappingTarget() { return m_vectorSnappingTarget; }
+
   // Xsheet  tab
 
   void setXsheetStep(int step);  //!< Sets the step used for the <I>next/prev
@@ -352,6 +364,15 @@ public:
   bool isInputCellsWithoutDoubleClickingEnabled() const {
     return m_inputCellsWithoutDoubleClickingEnabled;
   }
+
+  void enableShowXSheetToolbar(bool on);
+  bool isShowXSheetToolbarEnabled() const { return m_showXSheetToolbar; }
+
+  void enableExpandFunctionHeader(bool on);
+  bool isExpandFunctionHeaderEnabled() const { return m_expandFunctionHeader; }
+
+  void enableShowColumnNumbers(bool on);
+  bool isShowColumnNumbersEnabled() const { return m_showColumnNumbers; }
 
   // Animation  tab
 
@@ -462,7 +483,8 @@ Q_SIGNALS:
 private:
   std::unique_ptr<QSettings> m_settings;
 
-  QMap<int, QString> m_languageMaps, m_styleSheetMaps, m_roomMaps;
+  QStringList m_languageList, m_styleSheetList;
+  QMap<int, QString> m_roomMaps;
 
   std::vector<LevelFormat> m_levelFormats;
 
@@ -482,25 +504,26 @@ private:
       m_chunkSize, m_blanksCount, m_onionPaperThickness, m_step, m_shrink,
       m_textureSize, m_autocreationType, m_keyframeType, m_animationStep,
       m_ffmpegTimeout;  // seconds
-  int m_projectRoot;
-  int m_currentLanguage, m_currentStyleSheet,
-      m_undoMemorySize,  // in megabytes
+  int m_projectRoot, m_importPolicy;
+  QString m_currentLanguage, m_currentStyleSheet;
+  int m_undoMemorySize,  // in megabytes
       m_dragCellsBehaviour, m_lineTestFpsCapture, m_defLevelType, m_xsheetStep,
-      m_shmmax, m_shmseg, m_shmall, m_shmmni;
+      m_shmmax, m_shmseg, m_shmall, m_shmmni, m_vectorSnappingTarget;
 
   bool m_autoExposeEnabled, m_autoCreateEnabled, m_subsceneFolderEnabled,
       m_generatedMovieViewEnabled, m_xsheetAutopanEnabled,
       m_ignoreAlphaonColumn1Enabled, m_previewAlwaysOpenNewFlipEnabled,
       m_rewindAfterPlaybackEnabled, m_fitToFlipbookEnabled, m_autosaveEnabled,
       m_autosaveSceneEnabled, m_autosaveOtherFilesEnabled,
-      m_defaultViewerEnabled, m_pixelsOnly;
+      m_defaultViewerEnabled, m_pixelsOnly, m_showXSheetToolbar,
+      m_expandFunctionHeader, m_showColumnNumbers;
   bool m_rasterOptimizedMemory, m_saveUnpaintedInCleanup,
       m_askForOverrideRender, m_automaticSVNFolderRefreshEnabled, m_SVNEnabled,
       m_levelsBackupEnabled, m_minimizeSaveboxAfterEditing,
       m_sceneNumberingEnabled, m_animationSheetEnabled, m_inksOnly,
       m_startupPopupEnabled;
   bool m_fillOnlySavebox, m_show0ThickLines, m_regionAntialias;
-  bool m_onionSkinDuringPlayback;
+  bool m_onionSkinDuringPlayback, m_ignoreImageDpi;
   TPixel32 m_viewerBGColor, m_previewBGColor, m_chessboardColor1,
       m_chessboardColor2;
   bool m_showRasterImagesDarkenBlendedInViewer,
