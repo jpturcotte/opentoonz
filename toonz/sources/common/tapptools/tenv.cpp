@@ -126,7 +126,7 @@ public:
   TFilePath getStuffDir() {
     if (m_stuffDir) return *m_stuffDir;
     if (m_isPortable)
-      return TFilePath((getWorkingDirectory() + "\\portablestuff\\"));
+      return TFilePath((getWorkingDirectory() + "/portablestuff/"));
 
     return TFilePath(getSystemVarValue(m_rootVarName));
   }
@@ -206,7 +206,7 @@ public:
 
     // check if portable
     TFilePath portableCheck =
-        TFilePath(m_workingDirectory + "\\portablestuff\\");
+        TFilePath(m_workingDirectory + "/portablestuff/");
     TFileStatus portableStatus(portableCheck);
     m_isPortable = portableStatus.doesExist();
   }
